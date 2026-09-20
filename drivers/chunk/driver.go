@@ -328,7 +328,7 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 		}
 	}
 	fileSize := chunkFile.GetSize()
-	mergedRrf := func(ctx context.Context, httpRange http_range.Range) (io.ReadCloser, error) {
+	mergedRrf := func(ctx context.Context, httpRange http_range.Range) (_ io.ReadCloser, err error) {
 		start := httpRange.Start
 		length := httpRange.Length
 		if length < 0 || start+length > fileSize {
@@ -339,6 +339,11 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 		}
 		rs := make([]io.Reader, 0)
 		cs := make(utils.Closers, 0)
+		defer func() {
+			if err != nil {
+				_ = cs.Close()
+			}
+		}()
 		var (
 			rc       io.ReadCloser
 			readFrom bool
@@ -347,7 +352,6 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 			if readFrom {
 				l, o, err := op.Link(ctx, remoteStorage, stdpath.Join(remoteActualPath, d.getPartName(idx)), args)
 				if err != nil {
-					_ = cs.Close()
 					return nil, err
 				}
 				cs = append(cs, l)
@@ -356,12 +360,10 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 					chunkSize2 = o.GetSize()
 				}
 				if chunkSize2 != chunkSize {
-					_ = cs.Close()
 					return nil, fmt.Errorf("chunk part[%d] size not match", idx)
 				}
 				rrf, err := stream.GetRangeReaderFromLink(chunkSize2, l)
 				if err != nil {
-					_ = cs.Close()
 					return nil, err
 				}
 				newLength := length - chunkSize2
@@ -372,7 +374,6 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 					rc, err = rrf.RangeRead(ctx, http_range.Range{Length: length})
 				}
 				if err != nil {
-					_ = cs.Close()
 					return nil, err
 				}
 				rs = append(rs, rc)
@@ -388,7 +389,6 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 			} else {
 				l, o, err := op.Link(ctx, remoteStorage, stdpath.Join(remoteActualPath, d.getPartName(idx)), args)
 				if err != nil {
-					_ = cs.Close()
 					return nil, err
 				}
 				cs = append(cs, l)
@@ -397,17 +397,14 @@ func (d *Chunk) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 					chunkSize2 = o.GetSize()
 				}
 				if chunkSize2 != chunkSize {
-					_ = cs.Close()
 					return nil, fmt.Errorf("chunk part[%d] size not match", idx)
 				}
 				rrf, err := stream.GetRangeReaderFromLink(chunkSize2, l)
 				if err != nil {
-					_ = cs.Close()
 					return nil, err
 				}
 				rc, err = rrf.RangeRead(ctx, http_range.Range{Start: start, Length: -1})
 				if err != nil {
-					_ = cs.Close()
 					return nil, err
 				}
 				length -= chunkSize2 - start

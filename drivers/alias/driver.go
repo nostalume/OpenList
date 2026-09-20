@@ -259,24 +259,16 @@ func (d *Alias) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 				_ = link.Close()
 				continue
 			}
-			l := &model.Link{
-				URL:           link.URL,
-				Header:        link.Header,
-				RangeReader:   link.RangeReader,
-				Concurrency:   link.Concurrency,
-				PartSize:      link.PartSize,
-				ContentLength: link.ContentLength,
-			}
 			if d.DownloadConcurrency > 0 {
-				l.Concurrency = d.DownloadConcurrency
+				link.Concurrency = d.DownloadConcurrency
 			}
 			if d.DownloadPartSize > 0 {
-				l.PartSize = d.DownloadPartSize * utils.KB
+				link.PartSize = d.DownloadPartSize * utils.KB
 			}
-			if l.ContentLength == 0 {
-				l.ContentLength = fi.GetSize()
+			if link.ContentLength == 0 {
+				link.ContentLength = fi.GetSize()
 			}
-			rr, err := stream.GetRangeReaderFromLink(l.ContentLength, l)
+			rr, err := stream.GetRangeReaderFromLink(link.ContentLength, link)
 			if err != nil {
 				_ = link.Close()
 				continue

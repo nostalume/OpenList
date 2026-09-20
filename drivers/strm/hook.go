@@ -127,8 +127,8 @@ func generateStrm(ctx context.Context, driver *Strm, obj model.Obj, localPath st
 		log.Warnf("failed to generate strm of obj %s: failed to read range: %v", localPath, err)
 		return
 	}
-	defer rc.Close()
 	same, err := isSameContent(localPath, size, rc)
+	_ = rc.Close()
 	if err != nil {
 		log.Warnf("failed to compare content of obj %s: %v", localPath, err)
 		return
