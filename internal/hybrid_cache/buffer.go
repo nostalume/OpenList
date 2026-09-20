@@ -18,14 +18,6 @@ func (m *BufferStore) Size() int64 {
 	return m.size
 }
 
-// 用于存储不复用的[]byte
-func (m *BufferStore) Append(buf []byte) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.size += int64(len(buf))
-	m.blocks = append(m.blocks, buf)
-}
-
 func (m *BufferStore) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
