@@ -232,10 +232,13 @@ type SeekableStream struct {
 	rangeReader model.RangeReaderIF
 }
 
-// NewSeekableStream create a SeekableStream from FileStream and Link
-// if FileStream.Reader is not nil, use it directly
-// else create RangeReader from Link
-func NewSeekableStream(fs *FileStream, link *model.Link) (*SeekableStream, error) {
+// NewSeekableStream adopts link and releases it if construction fails.
+func NewSeekableStream(fs *FileStream, link *model.Link) (_ *SeekableStream, err error) {
+	defer func() {
+		if err != nil && link != nil {
+			_ = link.Close()
+		}
+	}()
 	if len(fs.Mimetype) == 0 {
 		fs.Mimetype = utils.GetMimeType(fs.Obj.GetName())
 	}

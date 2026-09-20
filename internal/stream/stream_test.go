@@ -2,6 +2,7 @@ package stream_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,75 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 )
+
+type observedReadCloser struct {
+	io.Reader
+	close func()
+}
+
+func (r *observedReadCloser) Close() error {
+	r.close()
+	return nil
+}
+
+func TestNewSeekableStreamOwnsLinkOnConstructionFailure(t *testing.T) {
+	openErr := errors.New("open failed")
+	linkCloses := 0
+	link := &model.Link{
+		RangeReader: &model.FileRangeReader{RangeReaderIF: stream.RangeReaderFunc(func(context.Context, http_range.Range) (io.ReadCloser, error) {
+			return nil, openErr
+		})},
+		SyncClosers: utils.NewSyncClosers(utils.CloseFunc(func() error {
+			linkCloses++
+			return nil
+		})),
+	}
+
+	got, err := stream.NewSeekableStream(&stream.FileStream{Ctx: t.Context(), Obj: &model.Object{Name: "file", Size: 4}}, link)
+	if got != nil || !errors.Is(err, openErr) {
+		t.Fatalf("NewSeekableStream() = %v, %v; want nil, %v", got, err, openErr)
+	}
+	if linkCloses != 1 {
+		t.Fatalf("link closes = %d, want 1", linkCloses)
+	}
+}
+
+func TestSeekableStreamOwnsRepeatedRangeBodiesAndLink(t *testing.T) {
+	data := []byte("abcd")
+	bodyCloses, linkCloses := 0, 0
+	link := &model.Link{
+		RangeReader: stream.RangeReaderFunc(func(_ context.Context, requested http_range.Range) (io.ReadCloser, error) {
+			end := requested.Start + requested.Length
+			return &observedReadCloser{Reader: bytes.NewReader(data[requested.Start:end]), close: func() { bodyCloses++ }}, nil
+		}),
+		SyncClosers: utils.NewSyncClosers(utils.CloseFunc(func() error {
+			linkCloses++
+			return nil
+		})),
+	}
+	ss, err := stream.NewSeekableStream(&stream.FileStream{Ctx: t.Context(), Obj: &model.Object{Name: "file", Size: int64(len(data))}}, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, requested := range []http_range.Range{{Start: 0, Length: 2}, {Start: 2, Length: 2}} {
+		reader, err := ss.RangeRead(requested)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.ReadAll(reader); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if bodyCloses != 0 || linkCloses != 0 {
+		t.Fatalf("premature closes = bodies %d, link %d", bodyCloses, linkCloses)
+	}
+	if err := ss.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if bodyCloses != 2 || linkCloses != 1 {
+		t.Fatalf("closes = bodies %d, link %d; want 2, 1", bodyCloses, linkCloses)
+	}
+}
 
 func TestRangeRead(t *testing.T) {
 	type args struct {

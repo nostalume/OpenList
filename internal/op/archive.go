@@ -85,7 +85,6 @@ func GetArchiveToolAndStream(ctx context.Context, storage driver.Driver, path st
 	// Get first part stream
 	ss, err := stream.NewSeekableStream(&stream.FileStream{Ctx: ctx, Obj: obj}, l)
 	if err != nil {
-		_ = l.Close()
 		return nil, nil, nil, errors.WithMessagef(err, "failed get [%s] stream", path)
 	}
 	ret := []*stream.SeekableStream{ss}
@@ -120,7 +119,6 @@ func GetArchiveToolAndStream(ctx context.Context, storage driver.Driver, path st
 		}
 		ss1, e := stream.NewSeekableStream(&stream.FileStream{Ctx: ctx, Obj: o1}, l1)
 		if e != nil {
-			_ = l1.Close()
 			err = errors.WithMessagef(e, "failed get [%s] stream", p)
 			break
 		}
