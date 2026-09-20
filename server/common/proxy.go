@@ -17,7 +17,17 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 )
 
-func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.Obj) error {
+func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.Obj, proxyRange bool) error {
+	defer link.Close()
+	if proxyRange && link.RangeReader == nil && !strings.HasPrefix(link.URL, GetApiUrl(r.Context())+"/") {
+		size := file.GetSize()
+		if link.ContentLength > 0 {
+			size = link.ContentLength
+		}
+		if rangeReader, err := stream.GetRangeReaderFromLink(size, link); err == nil {
+			link = &model.Link{RangeReader: rangeReader, ContentLength: size}
+		}
+	}
 	// if link.MFile != nil {
 	// 	attachHeader(w, file, link)
 	// 	http.ServeContent(w, r, file.GetName(), file.ModTime(), link.MFile)
@@ -89,22 +99,6 @@ func GetEtag(file model.Obj, size int64) string {
 	}
 	// 参考nginx
 	return fmt.Sprintf(`"%x-%x"`, file.ModTime().Unix(), size)
-}
-
-func ProxyRange(ctx context.Context, link *model.Link, size int64) *model.Link {
-	if link.RangeReader == nil && !strings.HasPrefix(link.URL, GetApiUrl(ctx)+"/") {
-		if link.ContentLength > 0 {
-			size = link.ContentLength
-		}
-		rrf, err := stream.GetRangeReaderFromLink(size, link)
-		if err == nil {
-			return &model.Link{
-				RangeReader:   rrf,
-				ContentLength: size,
-			}
-		}
-	}
-	return link
 }
 
 type InterceptResponseWriter struct {

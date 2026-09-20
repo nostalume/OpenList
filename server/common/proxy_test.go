@@ -31,11 +31,18 @@ func TestProxyOverridesUpstreamContentDisposition(t *testing.T) {
 		Name: "测试文件.rar",
 		Size: int64(len(content)),
 	}
-	link := &model.Link{URL: upstream.URL}
+	closed := 0
+	link := &model.Link{
+		URL: upstream.URL,
+		SyncClosers: utils.NewSyncClosers(utils.CloseFunc(func() error {
+			closed++
+			return nil
+		})),
+	}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/sd/example", nil)
 
-	err := Proxy(recorder, request, link, file)
+	err := Proxy(recorder, request, link, file, false)
 	if err != nil {
 		t.Fatalf("Proxy() error = %v", err)
 	}
@@ -50,5 +57,8 @@ func TestProxyOverridesUpstreamContentDisposition(t *testing.T) {
 	}
 	if got, want := recorder.Body.String(), content; got != want {
 		t.Errorf("body = %q, want %q", got, want)
+	}
+	if closed != 1 {
+		t.Errorf("link close count = %d, want 1", closed)
 	}
 }
