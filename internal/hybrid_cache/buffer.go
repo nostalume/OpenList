@@ -21,11 +21,9 @@ func (m *BufferStore) Size() int64 {
 func (m *BufferStore) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.blocks) > 0 {
-		clear(m.blocks)
-		m.blocks = m.blocks[:0]
-		m.size = 0
-	}
+	clear(m.blocks)
+	m.blocks = nil
+	m.size = 0
 	return nil
 }
 
