@@ -24,26 +24,21 @@ func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.
 	// 	return nil
 	// }
 
-	if link.Concurrency > 0 || link.PartSize > 0 {
+	partitioned := link.Concurrency > 0 || link.PartSize > 0
+	if link.RangeReader != nil || partitioned {
 		attachHeader(w, file, link)
 		size := link.ContentLength
 		if size <= 0 {
 			size = file.GetSize()
 		}
-		rrf, _ := stream.GetRangeReaderFromLink(size, link)
-		if link.RangeReader == nil {
-			r = r.WithContext(context.WithValue(r.Context(), conf.RequestHeaderKey, r.Header))
+		rangeReader := link.RangeReader
+		if partitioned {
+			rangeReader, _ = stream.GetRangeReaderFromLink(size, link)
+			if link.RangeReader == nil {
+				r = r.WithContext(context.WithValue(r.Context(), conf.RequestHeaderKey, r.Header))
+			}
 		}
-		return net.ServeHTTP(w, r, file.GetName(), file.ModTime(), size, rrf)
-	}
-
-	if link.RangeReader != nil {
-		attachHeader(w, file, link)
-		size := link.ContentLength
-		if size <= 0 {
-			size = file.GetSize()
-		}
-		return net.ServeHTTP(w, r, file.GetName(), file.ModTime(), size, link.RangeReader)
+		return net.ServeHTTP(w, r, file.GetName(), file.ModTime(), size, rangeReader)
 	}
 
 	//transparent proxy
@@ -70,7 +65,6 @@ func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.
 func attachHeader(w http.ResponseWriter, file model.Obj, link *model.Link) {
 	fileName := file.GetName()
 	w.Header().Set("Content-Disposition", utils.GenerateContentDisposition(fileName))
-	w.Header().Set("Content-Type", utils.GetMimeType(fileName))
 	size := link.ContentLength
 	if size <= 0 {
 		size = file.GetSize()
